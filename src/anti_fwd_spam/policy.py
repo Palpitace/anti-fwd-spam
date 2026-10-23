@@ -96,6 +96,7 @@ class Config:
     bot_token: str
     webhook_secret: str
     reporter_ids: frozenset[int]
+    content_allowlist: frozenset[tuple[int, int]] = frozenset()
 
     @classmethod
     def from_values(
@@ -104,6 +105,7 @@ class Config:
         bot_token: object,
         webhook_secret: object,
         reporter_ids: object = "",
+        content_allowlist: object = "",
     ) -> Config:
         """Validate raw environment values and construct a configuration."""
         token = _required_string("BOT_TOKEN", bot_token, maximum=128)
@@ -134,6 +136,7 @@ class Config:
             token,
             secret,
             _parse_reporter_ids(reporter_ids),
+            _parse_content_allowlist(content_allowlist),
         )
 
 
@@ -273,6 +276,38 @@ def _parse_reporter_ids(value: object) -> frozenset[int]:
             parsed.add(_telegram_id(int(entry), allow_negative=True))
         except ValueError as error:
             message = "REPORTER_IDS entry is outside Telegram's range"
+            raise ConfigError(message) from error
+    return frozenset(parsed)
+
+
+def _parse_content_allowlist(value: object) -> frozenset[tuple[int, int]]:
+    if not isinstance(value, str) or len(value) > MAX_CONFIG_LENGTH:
+        message = f"CONTENT_ALLOWLIST must be a string no longer than {MAX_CONFIG_LENGTH} characters"
+        raise ConfigError(message)
+    if not value.strip():
+        return frozenset()
+    message = (
+        "CONTENT_ALLOWLIST must map negative group IDs to positive integer user ID arrays "
+        f"with at most {MAX_ID_ENTRIES} entries within Telegram's range"
+    )
+    try:
+        groups = json.loads(value)
+    except (ValueError, RecursionError) as error:
+        raise ConfigError(message) from error
+    if not isinstance(groups, dict):
+        raise ConfigError(message)
+    parsed: set[tuple[int, int]] = set()
+    count = 0
+    for group, members in groups.items():
+        if re.fullmatch(r"-[1-9][0-9]*", group) is None or not isinstance(members, list):
+            raise ConfigError(message)
+        count += len(members)
+        if count > MAX_ID_ENTRIES:
+            raise ConfigError(message)
+        try:
+            chat_id = _telegram_id(int(group), allow_negative=True)
+            parsed.update((chat_id, _telegram_id(member, allow_negative=False)) for member in members)
+        except (TypeError, ValueError) as error:
             raise ConfigError(message) from error
     return frozenset(parsed)
 

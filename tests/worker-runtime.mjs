@@ -31,7 +31,7 @@ before(async () => {
     modulesRoot: root,
     modules: ['entry.py', ...paths].map(path => ({ type: 'PythonModule', path: resolve(root, path) })),
     bindings: { ...workerOptions.bindings, BOT_TOKEN: token, TELEGRAM_WEBHOOK_SECRET: secret, BOT_USERNAME: username,
-      REPORTER_IDS: '11,-10012' },
+      REPORTER_IDS: '11,-10012', CONTENT_ALLOWLIST: '' },
     outboundService: async request => {
       outboundRequests.push(request.url);
       const providers = {

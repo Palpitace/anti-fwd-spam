@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from http import HTTPStatus
 from typing import TYPE_CHECKING
 
-from .actions import Actions
+from .actions import Actions, user_id
 from .constants import MAX_PROFILE_TEXT, SPAM_THRESHOLD
 from .evidence import MESSAGE_WINDOW_SECONDS, RETENTION_SECONDS, storage_errors
 from .model import (
@@ -112,11 +112,14 @@ def deferred_regex_match(state: dict[str, object]) -> bool:
 class ModelTasks:
     """Share scheduling and retention between classification and delete-and-mute actions."""
 
-    def __init__(self, store: ReportStore, bot_id: int) -> None:
+    def __init__(
+        self, store: ReportStore, bot_id: int, content_allowlist: frozenset[tuple[int, int]] = frozenset()
+    ) -> None:
         """Use this bot's D1 task namespace."""
         self.store = store
         self.database = store.database
         self.bot_id = bot_id
+        self.content_allowlist = content_allowlist
 
     async def enqueue(  # noqa: PLR0913 - Preserve the ordinary message API while adding an independent subject.
         self,
@@ -221,7 +224,7 @@ class ModelTasks:
     ) -> Task | None:
         """Atomically claim one due stage and charge an attempt before the external request.
 
-        Without inference, claim only deletions and unstarted biography checks; model retries stay paused.
+        Without inference, also claim exempt retries for cancellation; other model retries stay paused.
         """
         with storage_errors():
             row = (
@@ -231,7 +234,19 @@ class ModelTasks:
                     "WHERE rowid = (SELECT rowid FROM model_tasks WHERE bot_id = ? AND phase != 'done' "
                     "AND due_at <= ? AND lease_until <= ? AND stop_at > ? AND expires_at > ? "
                     "AND attempts < ? AND (? IS NULL OR (chat_id = ? AND message_id = ? AND subject_id = ?)) "
-                    "AND (? OR phase = 'delete' OR attempts = 0) "
+                    "AND (? OR phase = 'delete' OR attempts = 0 OR ("
+                    # Match _content_exempt so paused tasks are claimed only when they can be cancelled.
+                    "json_type(input_json, '$.target.from.is_bot') = 'false' "
+                    "AND json_type(input_json, '$.target.from.id') = 'integer' "
+                    "AND json_type(input_json, '$.target.sender_chat') IS NULL "
+                    "AND EXISTS (SELECT 1 FROM json_each(?) AS exempt "
+                    "WHERE json_extract(exempt.value, '$[0]') = model_tasks.chat_id "
+                    "AND json_extract(exempt.value, '$[1]') = json_extract(input_json, '$.target.from.id')) "
+                    "AND (json_type(input_json, '$.joining') IS NOT 'true' OR ("
+                    "NOT EXISTS (SELECT 1 FROM blacklisted_users WHERE bot_id = model_tasks.bot_id "
+                    "AND user_id = json_extract(input_json, '$.target.from.id')) "
+                    "AND NOT EXISTS (SELECT 1 FROM blacklisted_sources "
+                    "WHERE source_id = json_extract(input_json, '$.target.from.id')))))) "
                     "ORDER BY due_at, rowid LIMIT 1) RETURNING *",
                 )
                 .bind(
@@ -249,6 +264,7 @@ class ModelTasks:
                     target[1] if target else None,
                     subject_id,
                     inference,
+                    json.dumps(sorted(self.content_allowlist)),
                 )
                 .first()
             )
@@ -319,12 +335,17 @@ class ModelTasks:
             .run()
         )
 
-    async def run(self, task: Task, fetcher: Fetch, token: str, models: tuple[ModelConfig, ...], now: int) -> None:
+    async def run(  # noqa: C901 - Keep exemption, lease and retry transitions in one lifecycle.
+        self, task: Task, fetcher: Fetch, token: str, models: tuple[ModelConfig, ...], now: int
+    ) -> None:
         """Persist a profile or message decision before its independently leased moderation action."""
         payload = json.loads(task.input_json or "{}")
         snapshot = payload.get("target")
         target = snapshot if isinstance(snapshot, dict) else None
         joining = payload.get("joining") is True
+        if await self._content_exempt(task.chat_id, target, joining=joining):
+            await self.finish(task, "done", max(now, int(time.time())))
+            return
         # Tasks saved by the previous release have no mute flag and keep the mute.
         mute = payload.get("mute") is not False
         action: dict[str, object] = {"target": target, "update_id": payload.get("update_id")}
@@ -376,6 +397,16 @@ class ModelTasks:
         retry = await self._moderate(payload, fetcher, token, can_act=can_act)
         await self.finish(task, "delete" if retry else "done", max(now, int(time.time())), retry=retry)
 
+    async def _content_exempt(self, chat_id: int, target: dict[str, object] | None, *, joining: bool) -> bool:
+        identifier = user_id(target) if target is not None else None
+        if identifier is None or (chat_id, identifier) not in self.content_allowlist:
+            return False
+        # Join tasks also enforce explicit blacklists, which take precedence over content exemptions.
+        return not joining or not (
+            await self.store.is_blacklisted(self.bot_id, identifier)
+            or await self.store.matching_sources(frozenset({identifier}))
+        )
+
     async def _moderate(
         self, payload: dict[str, object], fetcher: Fetch, token: str, *, can_act: Callable[[], Awaitable[bool]]
     ) -> bool:
@@ -412,10 +443,12 @@ class ModelTasks:
         candidate = sender.get("id") if isinstance(sender, dict) else None
         identifier = candidate if type(candidate) is int else None
         if payload.get("joining") is True and isinstance(sender, dict) and identifier is not None:
-            if await self.store.is_blacklisted(self.bot_id, identifier):
+            if await self.store.is_blacklisted(self.bot_id, identifier) or await self.store.matching_sources(
+                frozenset({identifier})
+            ):
                 return True
             if sender.get("is_bot") is True:
-                return True if await self.store.matching_sources(frozenset({identifier})) else None
+                return None
             if matches_spam_text(state.get("nickname")):
                 return True
         await enrich_profiles(state, payload.get("profile_ids"), identifier, fetcher, token)

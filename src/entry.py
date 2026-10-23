@@ -75,6 +75,7 @@ class Default(WorkerEntrypoint):
             bot_token=bot_token,
             webhook_secret=webhook_secret,
             reporter_ids=_environment_string(self.env, "REPORTER_IDS", default=""),
+            content_allowlist=_environment_string(self.env, "CONTENT_ALLOWLIST", default=""),
         )
 
     def _get_models(self) -> tuple[ModelConfig, ...]:
@@ -92,7 +93,7 @@ class Default(WorkerEntrypoint):
         store = ReportStore(self.env.REPORTS)
         await store.expire(now)
         config = self._get_config()
-        tasks = ModelTasks(store, int(config.bot_token.split(":", 1)[0]))
+        tasks = ModelTasks(store, int(config.bot_token.split(":", 1)[0]), config.content_allowlist)
         await tasks.expire(now)
         models = self._get_models()
         for _ in range(SCHEDULED_TASKS_PER_RUN):

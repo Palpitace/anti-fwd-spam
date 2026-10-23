@@ -38,6 +38,8 @@ WHERE bot_id = 123456789 AND file_unique_id = 'example_unique_id';
 
 Manual database removal affects future filtering; lift its existing Telegram restriction separately. `/allow` handles account-ban and mute recovery together with list removal; confirmed recovery is not repeated during cleanup retries. If the command reports uncertain recovery, inspect membership/permissions before sending a new command; the old request will not blindly repeat a permission-changing operation. Keep member information private when viewing or exporting D1 data.
 
+To prevent repeated content false positives for a trusted member in a specific group, configure [group content exemptions](setup.md#optional-group-content-exemptions). `CONTENT_ALLOWLIST` grants no reporting permissions and `REPORTER_IDS` does not grant immunity. Account/source blacklists and authorized reports still take precedence. Use `/allow` separately to recover existing bans or restrictions. Removing a group/user pair resumes checks on subsequent messages; finished tasks are not revived. Exempt members can also post genuine spam without automatic content filtering, so retain a trusted reporter for manual handling.
+
 ## Delivery and troubleshooting
 
 Check webhook delivery from a shell that holds `BOT_TOKEN`:

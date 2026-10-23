@@ -44,6 +44,7 @@ The complete copy-pasteable setup is in [Deployment setup](docs/setup.md). Start
 - **Block and report a bot source:** reply with bare `/bs` to a direct bot message, or to an inline message when both its sender and source should be handled.
 - **Register a sticker set:** send its complete `https://t.me/addstickers/<set_name>` URL with `/bs`.
 - **Undo a ban or mute:** from a trusted identity in the affected supergroup, send `/allow @username` or `/allow <account ID>` to remove its blacklist entries and restore access. See [Operations](docs/operations.md) for username lookup limits and other false-positive recovery.
+- **Exempt a trusted member's content in one group:** configure [group content exemptions](docs/setup.md#optional-group-content-exemptions). This skips automatic content and joining-profile checks, grants no reporting authority, and preserves authorized reports and account/source blacklists.
 
 Reporting identity, administrator protection, source attribution, sticker handling, and false-positive recovery are defined by [the behavior contract](docs/behavior.md).
 

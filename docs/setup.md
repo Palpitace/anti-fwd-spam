@@ -56,6 +56,18 @@ TELEGRAM_WEBHOOK_SECRET="$(mise exec -- python -c 'import secrets; print(secrets
 printf '%s' "$TELEGRAM_WEBHOOK_SECRET" | mise exec -- uv run pywrangler secret put TELEGRAM_WEBHOOK_SECRET
 ```
 
+## Optional group content exemptions
+
+Set the optional `CONTENT_ALLOWLIST` Worker secret to a JSON object mapping negative group IDs to arrays of positive numeric user IDs. For example, `{"-10012":[22,33],"-10013":[44]}` exempts users 22 and 33 only in group -10012, and user 44 only in group -10013. Use real non-bot account IDs, not usernames or sender-chat IDs. Keep actual member IDs out of repository files and public logs.
+
+```bash
+mise exec -- uv run pywrangler secret put CONTENT_ALLOWLIST
+```
+
+Missing, empty or `{}` configuration disables exemptions. The JSON string is limited to 4,096 characters and 500 total user entries; group and user IDs must be nonzero integers within Telegram's supported range. Invalid configuration fails explicitly rather than silently disabling moderation. No D1 migration is required.
+
+This list skips automatic content and joining-profile checks only in the specified groups. It is independent of `REPORTER_IDS`, grants no command permissions, and does not override authorized reports or account/source blacklists. Adding a member does not undo existing Telegram restrictions; use `/allow` separately. Current configuration also applies to queued classification and punishment retries, but cannot recall requests already issued by an older invocation. See [the behavior contract](behavior.md#group-content-exemptions) for the full boundary.
+
 ## Optional model provider
 
 Semantic classification is optional and uses GPT-6 Luna Decisions. Review provider privacy and pricing terms before saving a provider key as a Worker secret. A supported key enables classification.

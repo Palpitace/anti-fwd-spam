@@ -434,6 +434,8 @@ class Moderator:
         A denied report on local-rule spam is deleted without a mute, so a member who quotes that spam keeps speaking.
         """
         message = update.message
+        if (update.chat_id, user_id(message)) in self.config.content_allowlist:
+            return AppResponse(200, "content checks exempt")
         if update.sent_at is None or not recent(update.sent_at, int(time.time())):
             return AppResponse(200, "ignored")
         mute = not self.quotes_reported_spam(update)
@@ -476,7 +478,7 @@ class Moderator:
             "profile_ids": profile_ids(message),
             "update_id": update.update_id,
         }
-        tasks = ModelTasks(self.store, self.actions.bot_id)
+        tasks = ModelTasks(self.store, self.actions.bot_id, self.config.content_allowlist)
         if update.edited:
             queued = await tasks.enqueue_edit(
                 (update.chat_id, update.message_id), update.sent_at, payload, int(time.time()), edit_revision(update)
@@ -497,7 +499,7 @@ class Moderator:
             or not recent(update.sent_at, now)
         ):
             return AppResponse(200, "join ignored")
-        tasks = ModelTasks(self.store, self.actions.bot_id)
+        tasks = ModelTasks(self.store, self.actions.bot_id, self.config.content_allowlist)
         queued: list[int] = []
         seen: set[int] = set()
         members = update.message.get("new_chat_members")

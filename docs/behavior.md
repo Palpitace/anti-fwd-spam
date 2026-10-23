@@ -15,6 +15,14 @@ A reporting identity is either a configured user ID or a configured sender-chat 
 - An explicit unlisted `/bs` argument continues through ordinary filtering instead of registering a source.
 - A report target must be a valid message in the same group; a forum topic's creation message is not a target.
 
+## Group content exemptions
+
+`CONTENT_ALLOWLIST` independently pairs a group ID with a real non-bot user ID. A matching member skips automatic text/caption, nickname, biography, contact, sticker and model checks in that group, including eligible edits and the member's own joining-profile checks. Other groups, bot senders, sender-chat compatibility users, referenced authors, inviters and other members in a shared join notice do not inherit the exemption. Another member's confirmed join ban may still delete that shared notice.
+
+Content exemptions grant no reporting, source-registration or recovery authority; `REPORTER_IDS` grants no content exemption. Authorized reports and explicit account/source blacklist enforcement retain precedence. Messages remain eligible for the normal history index and later authorized report cleanup. The exemption neither removes blacklist rows nor restores existing Telegram bans, restrictions or deleted messages; use `/allow` for access recovery.
+
+Each background invocation uses its current configuration for both classification and punishment retries, including tasks queued before the exemption was configured. Exempt content tasks finish without further automatic punishment and clear their retained payload, even when all model providers are disabled. Other pending classification retries remain paused while providers are disabled. Joining tasks still enforce explicit blacklists. Removing an exemption restores checks on subsequent messages without reviving finished tasks. Configuration changes do not recall Telegram requests already issued by an older invocation.
+
 ## Routing order
 
 For a new group message, processing follows this order:
@@ -24,7 +32,7 @@ For a new group message, processing follows this order:
 3. Route a join notice to independent checks of its new members, rather than its inviter.
 4. For other messages, match explicit source identities and account blacklists.
 5. Index an eligible message for possible later history cleanup, then apply reply reports and remaining command handling.
-6. Apply all current-message text, nickname, contact-name and maintenance regexes before model classification for human senders below the mature-message threshold, with or without a reference. Established senders use the model for regex matches. Sticker checks retain their existing reference boundary, and bot senders retain local-only filtering.
+6. Skip content checks for a matching group content exemption. Otherwise, apply all current-message text, nickname, contact-name and maintenance regexes before model classification for human senders below the mature-message threshold, with or without a reference. Established senders use the model for regex matches. Sticker checks retain their existing reference boundary, and bot senders retain local-only filtering.
 7. Queue model classification for the remaining eligible input.
 8. Leave the message unchanged when no rule or model decision reaches the configured threshold.
 
@@ -36,7 +44,7 @@ flowchart TD
     D -->|No| E[Ignore, except commands]
     D -->|Yes| S{New members notice?}
     S -->|Yes| T[Check each joined account independently]
-    T --> U{Listed account/source or profile advertisement?}
+    T --> U{Listed account/source or non-exempt profile advertisement?}
     U -->|Yes, unprotected| V[Permanently ban joined account and remove notice]
     U -->|No or protected| Q[Leave member unchanged]
     S -->|No| F[Match source and account blacklists]
@@ -46,7 +54,9 @@ flowchart TD
     I --> J{Reply report?}
     J -->|Trusted| K[Action 2 on reported sender]
     J -->|Unlisted| L[Save evidence only]
-    J -->|No report| R{Actual bot sender?}
+    J -->|No report| AA{Group content exemption?}
+    AA -->|Yes| Q
+    AA -->|No| R{Actual bot sender?}
     R -->|Yes| O[Existing local rules on current message]
     R -->|No| M{Ten naturally matured observations?}
     M -->|No| W[Current-message regex checks, including replies]
