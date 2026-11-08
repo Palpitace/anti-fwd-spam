@@ -335,9 +335,7 @@ class ModelTasks:
             .run()
         )
 
-    async def run(  # noqa: C901 - Keep exemption, lease and retry transitions in one lifecycle.
-        self, task: Task, fetcher: Fetch, token: str, models: tuple[ModelConfig, ...], now: int
-    ) -> None:
+    async def run(self, task: Task, fetcher: Fetch, token: str, models: tuple[ModelConfig, ...], now: int) -> None:
         """Persist a profile or message decision before its independently leased moderation action."""
         payload = json.loads(task.input_json or "{}")
         snapshot = payload.get("target")
@@ -355,8 +353,6 @@ class ModelTasks:
             action["mute"] = mute
 
         async def can_act() -> bool:
-            if not await self._owns(task, max(now, int(time.time()))):
-                return False
             identifier = target["from"]["id"] if target is not None else None
             update_id = payload.get("update_id")
             return (
@@ -365,7 +361,7 @@ class ModelTasks:
                     await self.store.newer_allow(self.bot_id, identifier, update_id if type(update_id) is int else None)
                 )
                 is None
-            )
+            ) and await self._owns(task, max(now, int(time.time())))
 
         if task.phase == "classify":
             if not await can_act():
