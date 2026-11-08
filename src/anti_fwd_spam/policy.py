@@ -134,6 +134,7 @@ class Config:
     webhook_secret: str
     reporter_ids: frozenset[int]
     content_allowlist: frozenset[tuple[int, int]] = frozenset()
+    bot_allowlist: frozenset[tuple[int, int]] = frozenset()
 
     @classmethod
     def from_values(
@@ -143,6 +144,7 @@ class Config:
         webhook_secret: object,
         reporter_ids: object = "",
         content_allowlist: object = "",
+        bot_allowlist: object = "",
     ) -> Config:
         """Validate raw environment values and construct a configuration."""
         token = _required_string("BOT_TOKEN", bot_token, maximum=128)
@@ -173,7 +175,8 @@ class Config:
             token,
             secret,
             _parse_reporter_ids(reporter_ids),
-            _parse_content_allowlist(content_allowlist),
+            _parse_group_allowlist(content_allowlist, "CONTENT_ALLOWLIST"),
+            _parse_group_allowlist(bot_allowlist, "BOT_ALLOWLIST"),
         )
 
 
@@ -317,14 +320,14 @@ def _parse_reporter_ids(value: object) -> frozenset[int]:
     return frozenset(parsed)
 
 
-def _parse_content_allowlist(value: object) -> frozenset[tuple[int, int]]:
+def _parse_group_allowlist(value: object, name: str) -> frozenset[tuple[int, int]]:
     if not isinstance(value, str) or len(value) > MAX_CONFIG_LENGTH:
-        message = f"CONTENT_ALLOWLIST must be a string no longer than {MAX_CONFIG_LENGTH} characters"
+        message = f"{name} must be a string no longer than {MAX_CONFIG_LENGTH} characters"
         raise ConfigError(message)
     if not value.strip():
         return frozenset()
     message = (
-        "CONTENT_ALLOWLIST must map negative group IDs to positive integer user ID arrays "
+        f"{name} must map negative group IDs to positive integer user ID arrays "
         f"with at most {MAX_ID_ENTRIES} entries within Telegram's range"
     )
     try:

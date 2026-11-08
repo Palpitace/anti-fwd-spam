@@ -23,6 +23,12 @@ Content exemptions grant no reporting, source-registration or recovery authority
 
 Each background invocation uses its current configuration for both classification and punishment retries, including tasks queued before the exemption was configured. Exempt content tasks finish without further automatic punishment and clear their retained payload, even when all model providers are disabled. Other pending classification retries remain paused while providers are disabled. Joining tasks still enforce explicit blacklists. Removing an exemption restores checks on subsequent messages without reviving finished tasks. Configuration changes do not recall Telegram requests already issued by an older invocation.
 
+## Group bot source exemptions
+
+`BOT_ALLOWLIST` pairs a group ID with a bot ID. For messages in that group, the matching bot is excluded from automatic source-blacklist matching, whether it is an inline `via_bot`, a visible forwarded bot author, or the direct bot sender. Calling that bot does not itself delete the caller's message, mute the caller or ban the source. New messages and edits use the current configuration. Plain-text mentions alone are not source identities.
+
+This exemption only affects the listed source. Other sources on the same message, the sender's own account blacklist, ordinary content/sticker/model checks and authorized reports (including bare `/bs`) remain effective. It grants neither content exemption nor reporting authority. Joining-account enforcement is unchanged. Source blacklist rows stay intact and apply in other groups or after removal of the exemption; existing bans and restrictions require separate `/allow` recovery. Already-issued Telegram requests cannot be recalled by a configuration change.
+
 ## Routing order
 
 For a new group message, processing follows this order:
@@ -30,7 +36,7 @@ For a new group message, processing follows this order:
 1. Validate the update and authenticated webhook request.
 2. Dispatch authorized commands before automatic filtering.
 3. Route a join notice to independent checks of its new members, rather than its inviter.
-4. For other messages, match explicit source identities and account blacklists.
+4. For other messages, exclude group-allowlisted bot sources, then match remaining explicit source identities and account blacklists.
 5. Index an eligible message for possible later history cleanup, then apply reply reports and remaining command handling.
 6. Skip content checks for a matching group content exemption. Otherwise, apply all current-message text, nickname, contact-name and maintenance regexes before model classification for human senders below the mature-message threshold, with or without a reference. Established senders use the model for regex matches. Sticker checks retain their existing reference boundary. Bot senders use local rules first, followed by model classification when unmatched.
 7. Queue model classification for the remaining eligible input.

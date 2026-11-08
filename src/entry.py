@@ -76,6 +76,7 @@ class Default(WorkerEntrypoint):
             webhook_secret=webhook_secret,
             reporter_ids=_environment_string(self.env, "REPORTER_IDS", default=""),
             content_allowlist=_environment_string(self.env, "CONTENT_ALLOWLIST", default=""),
+            bot_allowlist=_environment_string(self.env, "BOT_ALLOWLIST", default=""),
         )
 
     def _get_models(self) -> tuple[ModelConfig, ...]:

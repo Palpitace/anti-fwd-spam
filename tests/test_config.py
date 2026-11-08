@@ -16,6 +16,7 @@ class ConfigurationTests(unittest.TestCase):
         empty = Config.from_values(bot_token="123:token", webhook_secret="secret")
         self.assertFalse(empty.reporter_ids)
         self.assertFalse(empty.content_allowlist)
+        self.assertFalse(empty.bot_allowlist)
 
     def test_user_configures_content_exemptions_separately_for_each_group(self) -> None:
         """user: A content exemption is a group/user pair and grants no reporting authority."""
@@ -53,8 +54,9 @@ class ConfigurationTests(unittest.TestCase):
             json.dumps({"-10012": [22] * 250, "-10013": [33] * 251}),
             *(json.dumps({"-10012": [member]}) for member in (0, -22, True, 22.0, "22", None, {}, [], 2**52)),
         ):
-            with self.subTest(value=value), self.assertRaises(ConfigError):
-                Config.from_values(bot_token="123:token", webhook_secret="secret", content_allowlist=value)
+            for setting in ("content_allowlist", "bot_allowlist"):
+                with self.subTest(setting=setting, value=value), self.assertRaises(ConfigError):
+                    Config.from_values(bot_token="123:token", webhook_secret="secret", **{setting: value})
 
     def test_user_accepts_content_exemptions_at_the_supported_limits(self) -> None:
         """user: Valid boundary IDs and the entry limit remain accepted."""
@@ -64,6 +66,17 @@ class ConfigurationTests(unittest.TestCase):
             content_allowlist=json.dumps({"-4503599627370495": [4503599627370495], "-10012": [22] * 499}),
         )
         self.assertEqual(config.content_allowlist, {(-4503599627370495, 4503599627370495), (-10012, 22)})
+
+    def test_user_configures_bot_sources_independently(self) -> None:
+        """user: Bot source exemptions are group-scoped and grant no other exemption or authority."""
+        config = Config.from_values(
+            bot_token="123:token",
+            webhook_secret="secret",
+            bot_allowlist='{"-10012":[7788,7788],"-10013":[5566]}',
+        )
+        self.assertEqual(config.bot_allowlist, {(-10012, 7788), (-10013, 5566)})
+        self.assertFalse(config.content_allowlist)
+        self.assertFalse(config.reporter_ids)
 
     def test_user_rejects_invalid_reporter_configuration(self) -> None:
         """user: Given malformed identity lists, When configured, Then no permissive fallback is enabled."""

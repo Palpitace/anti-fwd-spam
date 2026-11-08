@@ -65,6 +65,8 @@ curl --silent --show-error --fail-with-body \
 | Model usage incurs unexpected charges | Check provider billing and limits. The Experiential `:free` route stops when its allowance is exhausted. Failover can advance to configured paid providers. See [setup](setup.md#failover-and-costs). |
 | Storage errors | Check the `REPORTS` binding, migrations, and D1 limits. |
 
+To allow members to use a registered bot source in a specific group, configure [group bot source exemptions](setup.md#optional-group-bot-source-exemptions). `BOT_ALLOWLIST` suppresses only that source match, leaving content checks and authorized reports active. It does not restore an already muted or banned caller; use `/allow` for recovery.
+
 ## Privacy and retention
 
 The bot sends bounded text context and selected profile data to a configured decision-model provider only when classification is enabled. It does not download or inspect images, video, or audio. Provider image support does not change this boundary. Review provider terms before enabling classification.

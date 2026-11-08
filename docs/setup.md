@@ -68,6 +68,16 @@ Missing, empty or `{}` configuration disables exemptions. The JSON string is lim
 
 This list skips automatic content and joining-profile checks only in the specified groups. It is independent of `REPORTER_IDS`, grants no command permissions, and does not override authorized reports or account/source blacklists. Adding a member does not undo existing Telegram restrictions; use `/allow` separately. Current configuration also applies to queued classification and punishment retries, but cannot recall requests already issued by an older invocation. See [the behavior contract](behavior.md#group-content-exemptions) for the full boundary.
 
+## Optional group bot source exemptions
+
+Set the optional `BOT_ALLOWLIST` Worker secret to a JSON object mapping negative group IDs to arrays of positive numeric bot IDs, for example `{"-10012":[7788],"-10013":[5566]}`. Use bot IDs rather than usernames. Omit the secret or set `{}` to disable exemptions. Validation and size limits are the same as `CONTENT_ALLOWLIST`; the two settings are independent. Keep real IDs out of repository files and public logs.
+
+```bash
+mise exec -- uv run pywrangler secret put BOT_ALLOWLIST
+```
+
+In the configured group, calling or forwarding the listed bot does not trigger automatic source-blacklist punishment. Messages still undergo content checks; other sources, sender account blacklists and authorized reports remain effective. Direct bot messages get the same source-only exemption; joining bots do not. See [the behavior contract](behavior.md#group-bot-source-exemptions). Existing restrictions are not lifted automatically.
+
 ## Optional model provider
 
 Semantic classification is optional and uses GPT-6 Luna Decisions. Review provider privacy and pricing terms before saving a provider key as a Worker secret. A supported key enables classification.
